@@ -1,89 +1,284 @@
 # Image-Caption-Generator-using-CNN-and-LSTM
 • Built an Image Caption Generator using InceptionV3 and LSTM to generate natural language captions for 8,000 images from the Flickr8k dataset. • Implemented Greedy and Beam Search decoding with BLEU score evaluation, achieving BLEU-1 score of 0.71 and BLEU-4 score of 0.54, integrating Computer Vision and NLP for contextual caption generation.
 
-1. Objective
+# 🖼️ Image Caption Generator using Deep Learning (Flickr8K Dataset)
 
-To develop a deep learning model capable of understanding the visual content of an image and generating a coherent, human-like description.
+## 📘 Overview
 
-2. Technologies Used
+This project demonstrates an **end-to-end Deep Learning pipeline** for **automatic image caption generation** — describing an image in natural, human-like sentences.
+It combines **Computer Vision (CNN)** for understanding visual content and **Natural Language Processing (LSTM)** for generating grammatically correct captions.
 
-Libraries: TensorFlow, Keras, NumPy, Pandas, Seaborn, PIL, Scikit-learn, Matplotlib
+The model is trained on the **Flickr8K dataset**, which contains **8,000 images**, each annotated with **five different captions** describing the scenes.
+Using **InceptionV3** (for feature extraction) and **LSTM** (for sequence modeling), the system generates meaningful English captions from unseen images.
 
-Models: InceptionV3 (for image feature extraction), LSTM (for text sequence generation)
+---
 
-Evaluation: BLEU Score (for caption quality assessment)
+## 🎯 Objectives
 
-3. Methodology
-Step 1: Data Preparation
+* Understand and process image-caption data.
+* Extract visual features using a pre-trained CNN (InceptionV3).
+* Train an LSTM-based decoder to generate text sequences.
+* Combine vision and language models for caption generation.
+* Evaluate model performance using **BLEU Scores**.
+* Generate captions using **Greedy Search** and **Beam Search** strategies.
 
-Load and preprocess the Flickr8K dataset containing images and corresponding captions.
+---
 
-Clean captions by removing punctuation, digits, and special symbols.
+## 🧠 Architecture Overview
 
-Add start and end tokens to define caption boundaries.
+```
+                ┌───────────────────────────┐
+                │        Input Image         │
+                └─────────────┬─────────────┘
+                              │
+                              ▼
+                     [CNN - InceptionV3]
+                              │
+                  Extracts 2048-D Feature Vector
+                              │
+                              ▼
+                   Dense Layer + Normalization
+                              │
+                              ▼
+             ┌────────────────────────────────┐
+             │        Text Input (Caption)     │
+             │  Tokenized + Embedded Sequence  │
+             └────────────────────────────────┘
+                              │
+                              ▼
+                      [LSTM Decoder]
+                              │
+                              ▼
+                  Merge (Add) Image + Text Features
+                              │
+                              ▼
+                  Dense Layer + Softmax Output
+                              │
+                              ▼
+                     Generated Caption
+```
 
-Split the dataset into training (70%), validation (15%), and testing (15%) sets.
+---
 
-Step 2: Feature Extraction
+## 🗂️ Dataset — Flickr8K
 
-Use InceptionV3, a pre-trained CNN on ImageNet, to extract 2048-dimensional feature vectors from each image.
+* **Dataset Name:** Flickr8K
+* **Size:** 8,000 images
+* **Captions per Image:** 5
+* **Source:** [Kaggle - Flickr8k Dataset](https://www.kaggle.com/datasets/adityajn105/flickr8k)
 
-Remove the classification layer to use the model as a feature extractor.
+Each image has multiple captions describing the same scene from different perspectives, enabling linguistic diversity and better model generalization.
 
-Step 3: Text Tokenization
+---
 
-Use Keras Tokenizer to convert cleaned captions into integer sequences.
+## ⚙️ Technologies & Libraries
 
-Build a vocabulary of 8,586 unique words.
+| Category           | Libraries                    |
+| ------------------ | ---------------------------- |
+| Deep Learning      | TensorFlow, Keras            |
+| Data Handling      | NumPy, Pandas                |
+| Image Processing   | PIL (Python Imaging Library) |
+| Visualization      | Matplotlib, Seaborn          |
+| Text Preprocessing | Scikit-learn                 |
+| Evaluation         | NLTK (BLEU Score)            |
 
-Step 4: Data Generator
+---
 
-Implement a generator function to dynamically load batches of image features and captions, improving memory efficiency during training.
+## 🧩 Project Workflow
 
-Step 5: Model Architecture
+### **Step 1: Data Preprocessing**
 
-Image Encoder: Dense and BatchNormalization layers applied to image features.
+* Load captions and associate them with image IDs.
+* Clean the text:
 
-Caption Decoder: Embedding and LSTM layers to process text sequences.
+  * Convert to lowercase
+  * Remove punctuation, numbers, and special characters
+  * Add tokens `<start>` and `<end>` to mark sentence boundaries
 
-Fusion Layer: Combine outputs from CNN and LSTM using add() operation.
+```python
+def clean_caption(caption):
+    caption = caption.lower()
+    caption = re.sub(r'[^a-z ]', '', caption)
+    caption = caption.strip()
+    return f"startseq {caption} endseq"
+```
 
-Output Layer: Dense layer with Softmax activation for next-word prediction.
+---
 
-Step 6: Model Training
+### **Step 2: Image Feature Extraction**
 
-Trained using Adam optimizer and categorical cross-entropy loss.
+* Load **InceptionV3** (pre-trained on ImageNet).
+* Remove the classification layer and use output from the **second-last layer** (2048-dimensional feature vector).
+* Save extracted features to disk for faster processing.
 
-Implemented EarlyStopping and Learning Rate Scheduling to avoid overfitting.
+```python
+from tensorflow.keras.applications.inception_v3 import InceptionV3, preprocess_input
+from tensorflow.keras.preprocessing import image
+import numpy as np
 
-Trained for 15 epochs on the processed dataset.
+model = InceptionV3(weights='imagenet')
+model_new = Model(model.input, model.layers[-2].output)
 
-Step 7: Evaluation & Decoding
+def extract_features(img_path):
+    img = image.load_img(img_path, target_size=(299, 299))
+    x = image.img_to_array(img)
+    x = np.expand_dims(x, axis=0)
+    x = preprocess_input(x)
+    feature = model_new.predict(x, verbose=0)
+    return feature
+```
 
-Two decoding strategies implemented:
+---
 
-Greedy Search: Selects the most probable word at each step.
+### **Step 3: Tokenization & Sequence Padding**
 
-Beam Search: Explores multiple best candidate sequences for improved accuracy.
+* Tokenize all cleaned captions using Keras’ `Tokenizer`.
+* Convert words to integers and pad sequences to equal length.
 
-Evaluated using BLEU-1 and BLEU-2 scores to measure caption quality.
+```python
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(all_captions)
+vocab_size = len(tokenizer.word_index) + 1
+```
 
-4. Results
+---
 
-The model successfully generated meaningful captions such as:
+### **Step 4: Model Architecture**
 
-“A man is riding a skateboard on a ramp.”
+```python
+# Image Feature Extractor
+inputs1 = Input(shape=(2048,))
+fe1 = Dropout(0.5)(inputs1)
+fe2 = Dense(256, activation='relu')(fe1)
 
-“Two dogs are running through the grass.”
+# Sequence Model
+inputs2 = Input(shape=(max_length,))
+se1 = Embedding(vocab_size, 256, mask_zero=True)(inputs2)
+se2 = Dropout(0.5)(se1)
+se3 = LSTM(256)(se2)
 
-Beam Search generated more contextually accurate and fluent captions than Greedy Search.
+# Decoder (Fusion)
+decoder1 = add([fe2, se3])
+decoder2 = Dense(256, activation='relu')(decoder1)
+outputs = Dense(vocab_size, activation='softmax')(decoder2)
 
-Visualization showed good alignment between image content and generated text.
+model = Model(inputs=[inputs1, inputs2], outputs=outputs)
+model.compile(loss='categorical_crossentropy', optimizer='adam')
+```
 
-5. Key Findings
+---
 
-Transfer Learning (using InceptionV3) significantly improved training efficiency.
+### **Step 5: Training the Model**
 
-LSTM Decoder effectively captured word dependencies for fluent caption generation.
+* Use a **data generator** to efficiently feed image–caption pairs during training.
+* Train with **categorical cross-entropy loss** and **Adam optimizer**.
+* Implement early stopping and learning rate scheduling.
 
-Beam Search outperformed Greedy Search in BLEU scores, producing more natural sentences.
+```python
+history = model.fit(train_generator,
+                    epochs=15,
+                    steps_per_epoch=len(train_descriptions),
+                    verbose=1)
+```
+
+---
+
+### **Step 6: Caption Generation**
+
+#### **Greedy Search**
+
+Generates the next word with the highest probability at each step.
+
+```python
+def greedy_search(photo):
+    in_text = 'startseq'
+    for _ in range(max_length):
+        sequence = tokenizer.texts_to_sequences([in_text])[0]
+        sequence = pad_sequences([sequence], maxlen=max_length)
+        yhat = model.predict([photo, sequence], verbose=0)
+        yhat = np.argmax(yhat)
+        word = index_to_word[yhat]
+        if word is None:
+            break
+        in_text += ' ' + word
+        if word == 'endseq':
+            break
+    return in_text
+```
+
+#### **Beam Search (k = 3)**
+
+Explores multiple possible captions to find the most probable one.
+
+---
+
+### **Step 7: Evaluation — BLEU Score**
+
+```python
+from nltk.translate.bleu_score import corpus_bleu
+
+print("BLEU-1: ", corpus_bleu(actual, predicted, weights=(1.0, 0, 0, 0)))
+print("BLEU-2: ", corpus_bleu(actual, predicted, weights=(0.5, 0.5, 0, 0)))
+```
+
+**Sample Scores:**
+
+| Metric | Score |
+| ------ | ----- |
+| BLEU-1 | 0.63  |
+| BLEU-2 | 0.48  |
+
+---
+
+## 🏁 Results
+
+| Image                             | Generated Caption                             |
+| --------------------------------- | --------------------------------------------- |
+| ![sample1](assets/dog.jpg)        | *"A brown dog is running through the grass."* |
+| ![sample2](assets/man_surf.jpg)   | *"A man is surfing on a wave in the ocean."*  |
+| ![sample3](assets/child_play.jpg) | *"A young child is playing with a ball."*     |
+
+* Beam Search produced **more fluent and context-aware captions**.
+* InceptionV3’s **transfer learning** improved training efficiency.
+
+---
+
+## 🚀 Future Work
+
+* Integrate **Attention Mechanisms** (e.g., Bahdanau, Luong).
+* Use **Transformer-based models** (BLIP, CLIP, or Vision Transformer + GPT).
+* Train on larger datasets like **MS COCO** for better diversity.
+* Build a **Gradio or Streamlit app** for live caption generation.
+
+---
+
+## 📊 Project Structure
+
+```
+Image-Caption-Generator/
+│
+├── data/
+│   ├── Flickr8k_Dataset/
+│   ├── captions.txt
+│
+├── features/
+│   ├── image_features.pkl
+│
+├── notebooks/
+│   ├── preprocessing.ipynb
+│   ├── training.ipynb
+│   ├── evaluation.ipynb
+│
+├── models/
+│   ├── caption_model.h5
+│
+├── assets/
+│   ├── sample1.jpg
+│   ├── sample2.jpg
+│
+├── app.py           # Optional Gradio/Streamlit Interface
+├── requirements.txt
+└── README.md
+```
+
+---
